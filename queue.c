@@ -1,43 +1,59 @@
 #include "queue.h"
 #include "tile_game.h"
-#include "linked_list.h"
-#include <stdlib.h>
-#include <stdbool.h>
 
 struct queue {
-    struct linked_list list;
+    struct list_node *head;
+    struct list_node *tail;
 };
 
 // Initialize the queue
 struct queue *create_queue() {
     struct queue *q = malloc(sizeof(struct queue));
     if (!q) return NULL;
-    q->list.head = NULL;
-    q->list.tail = NULL;
+    q->head = NULL;
+    q->tail = NULL;
     return q;
 }
 
 // Enqueue a game state (converted to an integer)
 void enqueue(struct queue *q, struct game_state state) {
-    uint64_t serialized_state = serialize(state);
-    insert_at_tail(&q->list, serialized_state);
+    struct list_node *node = malloc(sizeof(struct list_node));
+    if (!node) return;
+    node->value = serialize(state);
+    node->next = NULL;
+
+    if (q->tail) {
+        q->tail->next = node;
+    } else {
+        q->head = node;
+    }
+    q->tail = node;
 }
 
 // Dequeue a game state (converted back from an integer)
 struct game_state dequeue(struct queue *q) {
-    if (!q->list.head) return (struct game_state){0}; // Empty queue
-    uint64_t serialized_state = remove_from_head(&q->list);
+    if (!q->head) return (struct game_state){0}; // Empty queue
+    
+    struct list_node *temp = q->head;
+    uint64_t serialized_state = temp->value;
+    q->head = q->head->next;
+    
+    if (!q->head) q->tail = NULL;
+
+    free(temp);
     return deserialize(serialized_state);
 }
 
 // Check if the queue is empty
 bool is_empty(struct queue *q) {
-    return q->list.head == NULL;
+    return q->head == NULL;
 }
 
 // Free the queue
 void free_queue(struct queue *q) {
-    free_list(&q->list);
+    while (!is_empty(q)) {
+        dequeue(q); // Remove each node
+    }
     free(q);
 }
 
@@ -48,21 +64,18 @@ int number_of_moves(struct game_state start) {
 
     enqueue(q, start);
 
-    // A simple visited hash table to track seen game states
     bool visited[1000000] = {0};  // Adjust size based on expected unique states
     visited[serialize(start) % 1000000] = true;
 
     while (!is_empty(q)) {
         struct game_state current = dequeue(q);
 
-        // If solved, return the move count
         if (is_solved(current)) {
             int result = current.num_steps;
             free_queue(q);
             return result;
         }
 
-        // Generate possible next states (up, down, left, right)
         struct game_state next_states[4];
         int num_next_states = get_next_states(current, next_states);
 
@@ -79,3 +92,4 @@ int number_of_moves(struct game_state start) {
     free_queue(q);
     return -1; // No solution found
 }
+
